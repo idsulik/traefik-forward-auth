@@ -13,8 +13,27 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	jose "gopkg.in/square/go-jose.v2"
+	"github.com/stretchr/testify/mock"
+	"gopkg.in/square/go-jose.v2"
 )
+
+// MockCookieStore is a mock implementation of the CookieStore interface
+type MockCookieStore struct {
+	mock.Mock
+}
+
+func (m *MockCookieStore) SetCookie(name, value string) {
+	m.Called(name, value)
+}
+
+func (m *MockCookieStore) GetCookie(name string) (string, error) {
+	args := m.Called(name)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCookieStore) DeleteCookie(name string) {
+	m.Called(name)
+}
 
 // Tests
 
@@ -29,7 +48,24 @@ func TestOIDCSetup(t *testing.T) {
 
 	err := p.Setup()
 	if assert.Error(err) {
-		assert.Equal("providers.oidc.issuer-url, providers.oidc.client-id, providers.oidc.client-secret must be set", err.Error())
+		assert.Equal(
+			"providers.oidc.issuer-url, providers.oidc.client-id, providers.oidc.client-secret must be set",
+			err.Error(),
+		)
+	}
+
+	p.IssuerURL = "url"
+
+	err = p.Setup()
+	if assert.Error(err) {
+		assert.Equal("providers.oidc.client-id, providers.oidc.client-secret must be set", err.Error())
+	}
+
+	p.ClientID = "id"
+
+	err = p.Setup()
+	if assert.Error(err) {
+		assert.Equal("providers.oidc.client-secret must be set", err.Error())
 	}
 }
 
@@ -39,8 +75,15 @@ func TestOIDCGetLoginURL(t *testing.T) {
 	provider, server, serverURL, _ := setupOIDCTest(t, nil)
 	defer server.Close()
 
-	// Check url
-	uri, err := url.Parse(provider.GetLoginURL("http://example.com/_oauth", "state"))
+	mockCookieStore := new(MockCookieStore)
+
+	// Mock the behavior of storing nonce and pkceVerifier in cookies
+	mockCookieStore.On("SetCookie", CookieNameNonce, mock.Anything).Return()
+	mockCookieStore.On("SetCookie", CookieNamePkceCode, mock.Anything).Return()
+
+	// Check URL without PKCE
+	loginUrl, _ := provider.GetLoginURL("http://example.com/_oauth", "state", mockCookieStore)
+	uri, err := url.Parse(loginUrl)
 	assert.Nil(err)
 	assert.Equal(serverURL.Scheme, uri.Scheme)
 	assert.Equal(serverURL.Host, uri.Host)
@@ -48,25 +91,55 @@ func TestOIDCGetLoginURL(t *testing.T) {
 
 	// Check query string
 	qs := uri.Query()
+
+	// Capture the nonce from the cookie store
+	capturedNonce := qs.Get("nonce")
 	expectedQs := url.Values{
 		"client_id":     []string{"idtest"},
 		"redirect_uri":  []string{"http://example.com/_oauth"},
 		"response_type": []string{"code"},
 		"scope":         []string{"openid profile email"},
 		"state":         []string{"state"},
+		"nonce":         []string{capturedNonce},
 	}
 	assert.Equal(expectedQs, qs)
 
-	// Calling the method should not modify the underlying config
-	assert.Equal("", provider.Config.RedirectURL)
+	// Test with PkceRequired config option
+	provider.PkceRequired = true
 
-	//
+	// Check URL with PKCE
+	loginUrl, _ = provider.GetLoginURL("http://example.com/_oauth", "state", mockCookieStore)
+	uri, err = url.Parse(loginUrl)
+	assert.Nil(err)
+	assert.Equal(serverURL.Scheme, uri.Scheme)
+	assert.Equal(serverURL.Host, uri.Host)
+	assert.Equal("/auth", uri.Path)
+
+	// Check query string
+	qs = uri.Query()
+
+	// Capture the nonce and code challenge from the query string
+	capturedNonce = qs.Get("nonce")
+	capturedCodeChallenge := qs.Get("code_challenge")
+
+	expectedQs = url.Values{
+		"client_id":             []string{"idtest"},
+		"code_challenge":        []string{capturedCodeChallenge},
+		"code_challenge_method": []string{"S256"},
+		"redirect_uri":          []string{"http://example.com/_oauth"},
+		"response_type":         []string{"code"},
+		"scope":                 []string{"openid profile email"},
+		"state":                 []string{"state"},
+		"nonce":                 []string{capturedNonce},
+	}
+	assert.Equal(expectedQs, qs)
+
 	// Test with resource config option
-	//
 	provider.Resource = "resourcetest"
 
-	// Check url
-	uri, err = url.Parse(provider.GetLoginURL("http://example.com/_oauth", "state"))
+	// Check URL with resource
+	loginUrl, _ = provider.GetLoginURL("http://example.com/_oauth", "state", mockCookieStore)
+	uri, err = url.Parse(loginUrl)
 	assert.Nil(err)
 	assert.Equal(serverURL.Scheme, uri.Scheme)
 	assert.Equal(serverURL.Host, uri.Host)
@@ -84,23 +157,37 @@ func TestOIDCGetLoginURL(t *testing.T) {
 	}
 	assert.Equal(expectedQs, qs)
 
-	// Calling the method should not modify the underlying config
+	// Ensure the underlying config is not modified
 	assert.Equal("", provider.Config.RedirectURL)
+
+	// Verify that SetCookie was called as expected
+	mockCookieStore.AssertCalled(t, "SetCookie", CookieNameNonce, mock.Anything)
+	if provider.PkceRequired {
+		mockCookieStore.AssertCalled(t, "SetCookie", CookieNamePkceCode, mock.Anything)
+	}
 }
 
 func TestOIDCExchangeCode(t *testing.T) {
 	assert := assert.New(t)
+	// Setup the OIDC provider with a mock CookieStore
+	mockCookieStore := new(MockCookieStore)
 
-	provider, server, _, _ := setupOIDCTest(t, map[string]map[string]string{
-		"token": {
-			"code":         "code",
-			"grant_type":   "authorization_code",
-			"redirect_uri": "http://example.com/_oauth",
+	// Simulate the behavior of the cookie store to return a specific PKCE code
+	mockCookieStore.On("GetCookie", CookieNamePkceCode).Return("mockPkceCode", nil)
+	mockCookieStore.On("GetCookie", CookieNameNonce).Return("mockNonce", nil)
+
+	provider, server, _, _ := setupOIDCTest(
+		t, map[string]map[string]string{
+			"token": {
+				"code":         "code",
+				"grant_type":   "authorization_code",
+				"redirect_uri": "http://example.com/_oauth",
+			},
 		},
-	})
+	)
 	defer server.Close()
 
-	token, err := provider.ExchangeCode("http://example.com/_oauth", "code")
+	token, err := provider.ExchangeCode("http://example.com/_oauth", "code", mockCookieStore)
 	assert.Nil(err)
 	assert.Equal("id_123456789", token)
 }
@@ -112,14 +199,16 @@ func TestOIDCGetUser(t *testing.T) {
 	defer server.Close()
 
 	// Generate JWT
-	token := key.sign(t, []byte(`{
+	token := key.sign(
+		t, []byte(`{
 		"iss": "`+serverURL.String()+`",
 		"exp":`+strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)+`,
 		"aud": "idtest",
 		"sub": "1",
 		"email": "example@example.com",
 		"email_verified": true
-	}`))
+	}`),
+	)
 
 	// Get user
 	user, err := provider.GetUser(token)
@@ -189,12 +278,14 @@ func (s *OIDCServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/.well-known/openid-configuration" {
 		// Open id config
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
+		fmt.Fprint(
+			w, `{
 			"issuer":"`+s.url.String()+`",
 			"authorization_endpoint":"`+s.url.String()+`/auth",
 			"token_endpoint":"`+s.url.String()+`/token",
 			"jwks_uri":"`+s.url.String()+`/jwks"
-		}`)
+		}`,
+		)
 	} else if r.URL.Path == "/token" {
 		// Token request
 		// Check body
@@ -205,10 +296,12 @@ func (s *OIDCServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
+		fmt.Fprint(
+			w, `{
 			"access_token":"123456789",
 			"id_token":"id_123456789"
-		}`)
+		}`,
+		)
 	} else if r.URL.Path == "/jwks" {
 		// Key request
 		w.Header().Set("Content-Type", "application/json")
@@ -257,10 +350,12 @@ func (k *rsaKey) publicJWK(t *testing.T) string {
 
 // sign creates a JWS using the private key from the provided payload.
 func (k *rsaKey) sign(t *testing.T, payload []byte) string {
-	signer, err := jose.NewSigner(jose.SigningKey{
-		Algorithm: k.alg,
-		Key:       k.key,
-	}, nil)
+	signer, err := jose.NewSigner(
+		jose.SigningKey{
+			Algorithm: k.alg,
+			Key:       k.key,
+		}, nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
