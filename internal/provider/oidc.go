@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/coreos/go-oidc"
@@ -12,8 +14,9 @@ import (
 )
 
 const (
-	CookieNameNonce    = "oidc-nonce"
-	CookieNamePkceCode = "oidc-pkce-code"
+	cookieNameNonce    = "oidc-nonce"
+	cookieNamePkceCode = "oidc-pkce-code"
+	cookieMaxAge       = 600 // 10 minutes
 )
 
 // OIDC provider
@@ -75,23 +78,31 @@ func (o *OIDC) GetLoginURL(redirectURI, state string, cookieStore cookie.CookieS
 	// Generate and store nonce
 	nonce, err := pkce.GenerateNonce()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	cookieStore.SetCookie(CookieNameNonce, nonce)
+	cookieStore.SetCookie(cookieNameNonce, nonce,
+		cookie.WithMaxAge(cookieMaxAge),
+		cookie.WithSameSite(http.SameSiteStrictMode),
+	)
 
 	opts = append(opts, oauth2.SetAuthURLParam("nonce", nonce))
 
 	if o.PkceRequired {
 		pkceVerifier, err := pkce.CreateCodeVerifier()
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create PKCE verifier: %w", err)
 		}
 
-		opts = append(opts, oauth2.SetAuthURLParam("code_challenge_method", "S256"))
-		opts = append(opts, oauth2.SetAuthURLParam("code_challenge", pkceVerifier.CodeChallengeS256()))
+		opts = append(opts,
+			oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+			oauth2.SetAuthURLParam("code_challenge", pkceVerifier.CodeChallengeS256()),
+		)
 
-		cookieStore.SetCookie(CookieNamePkceCode, pkceVerifier.String())
+		cookieStore.SetCookie(cookieNamePkceCode, pkceVerifier.String(),
+			cookie.WithMaxAge(cookieMaxAge),
+			cookie.WithSameSite(http.SameSiteStrictMode),
+		)
 	}
 	return o.OAuthGetLoginURL(redirectURI, state, opts...), nil
 }
@@ -101,11 +112,11 @@ func (o *OIDC) ExchangeCode(redirectURI, code string, cookieStore cookie.CookieS
 	var opts []oauth2.AuthCodeOption
 
 	if o.PkceRequired {
-		pkceCode, err := cookieStore.GetCookie(CookieNamePkceCode)
+		pkceCode, err := cookieStore.GetCookie(cookieNamePkceCode)
 		if err != nil {
 			return "", err
 		}
-		cookieStore.DeleteCookie(CookieNamePkceCode)
+		cookieStore.DeleteCookie(cookieNamePkceCode)
 		opts = append(opts, oauth2.SetAuthURLParam("code_verifier", pkceCode))
 	}
 
@@ -126,12 +137,12 @@ func (o *OIDC) ExchangeCode(redirectURI, code string, cookieStore cookie.CookieS
 		return "", err
 	}
 
-	nonce, err := cookieStore.GetCookie(CookieNameNonce)
+	nonce, err := cookieStore.GetCookie(cookieNameNonce)
 	if err != nil {
 		return "", errors.New("nonce not found")
 	}
 
-	cookieStore.DeleteCookie(CookieNameNonce)
+	cookieStore.DeleteCookie(cookieNameNonce)
 
 	if idToken.Nonce != nonce {
 		return "", errors.New("nonce verification failed")

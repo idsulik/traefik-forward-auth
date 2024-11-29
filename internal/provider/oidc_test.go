@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/thomseddon/traefik-forward-auth/internal/cookie"
 	"gopkg.in/square/go-jose.v2"
 )
 
@@ -22,7 +23,7 @@ type MockCookieStore struct {
 	mock.Mock
 }
 
-func (m *MockCookieStore) SetCookie(name, value string) {
+func (m *MockCookieStore) SetCookie(name, value string, opts ...cookie.CookieOption) {
 	m.Called(name, value)
 }
 
@@ -77,9 +78,9 @@ func TestOIDCGetLoginURL(t *testing.T) {
 
 	mockCookieStore := new(MockCookieStore)
 
-	// Mock the behavior of storing nonce and pkceVerifier in cookies
-	mockCookieStore.On("SetCookie", CookieNameNonce, mock.Anything).Return()
-	mockCookieStore.On("SetCookie", CookieNamePkceCode, mock.Anything).Return()
+	// Use mock.Anything for all parameters since we're passing cookie options now
+	mockCookieStore.On("SetCookie", cookieNameNonce, mock.Anything, mock.Anything).Return()
+	mockCookieStore.On("SetCookie", cookieNamePkceCode, mock.Anything, mock.Anything).Return()
 
 	// Check URL without PKCE
 	loginUrl, _ := provider.GetLoginURL("http://example.com/_oauth", "state", mockCookieStore)
@@ -161,35 +162,47 @@ func TestOIDCGetLoginURL(t *testing.T) {
 	assert.Equal("", provider.Config.RedirectURL)
 
 	// Verify that SetCookie was called as expected
-	mockCookieStore.AssertCalled(t, "SetCookie", CookieNameNonce, mock.Anything)
+	mockCookieStore.AssertCalled(t, "SetCookie", cookieNameNonce, mock.Anything, mock.Anything)
 	if provider.PkceRequired {
-		mockCookieStore.AssertCalled(t, "SetCookie", CookieNamePkceCode, mock.Anything)
+		mockCookieStore.AssertCalled(t, "SetCookie", cookieNamePkceCode, mock.Anything, mock.Anything)
 	}
 }
 
 func TestOIDCExchangeCode(t *testing.T) {
 	assert := assert.New(t)
-	// Setup the OIDC provider with a mock CookieStore
+
 	mockCookieStore := new(MockCookieStore)
 
-	// Simulate the behavior of the cookie store to return a specific PKCE code
-	mockCookieStore.On("GetCookie", CookieNamePkceCode).Return("mockPkceCode", nil)
-	mockCookieStore.On("GetCookie", CookieNameNonce).Return("mockNonce", nil)
+	// Simulate the behavior of the cookie store
+	mockCookieStore.On("GetCookie", cookieNamePkceCode).Return("mockPkceCode", nil)
+	mockCookieStore.On("GetCookie", cookieNameNonce).Return("mockNonce", nil)
+	mockCookieStore.On("DeleteCookie", cookieNamePkceCode).Return()
+	mockCookieStore.On("DeleteCookie", cookieNameNonce).Return()
 
 	provider, server, _, _ := setupOIDCTest(
 		t, map[string]map[string]string{
 			"token": {
-				"code":         "code",
-				"grant_type":   "authorization_code",
-				"redirect_uri": "http://example.com/_oauth",
+				"code":          "code",
+				"grant_type":    "authorization_code",
+				"redirect_uri":  "http://example.com/_oauth",
+				"code_verifier": "mockPkceCode", // Add PKCE verifier
 			},
 		},
 	)
 	defer server.Close()
 
+	// Enable PKCE for the test
+	provider.PkceRequired = true
+
 	token, err := provider.ExchangeCode("http://example.com/_oauth", "code", mockCookieStore)
-	assert.Nil(err)
-	assert.Equal("id_123456789", token)
+	assert.NoError(err)
+	assert.NotEmpty(token)
+
+	// Verify cookie store interactions
+	mockCookieStore.AssertCalled(t, "GetCookie", cookieNamePkceCode)
+	mockCookieStore.AssertCalled(t, "GetCookie", cookieNameNonce)
+	mockCookieStore.AssertCalled(t, "DeleteCookie", cookieNamePkceCode)
+	mockCookieStore.AssertCalled(t, "DeleteCookie", cookieNameNonce)
 }
 
 func TestOIDCGetUser(t *testing.T) {
@@ -280,11 +293,11 @@ func (s *OIDCServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(
 			w, `{
-			"issuer":"`+s.url.String()+`",
-			"authorization_endpoint":"`+s.url.String()+`/auth",
-			"token_endpoint":"`+s.url.String()+`/token",
-			"jwks_uri":"`+s.url.String()+`/jwks"
-		}`,
+            "issuer":"`+s.url.String()+`",
+            "authorization_endpoint":"`+s.url.String()+`/auth",
+            "token_endpoint":"`+s.url.String()+`/token",
+            "jwks_uri":"`+s.url.String()+`/jwks"
+        }`,
 		)
 	} else if r.URL.Path == "/token" {
 		// Token request
@@ -295,13 +308,21 @@ func (s *OIDCServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Create a signed JWT token for testing
+		idToken := s.key.sign(s.t, []byte(`{
+            "iss": "`+s.url.String()+`",
+            "sub": "test_subject",
+            "aud": "idtest",
+            "exp": `+strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)+`,
+            "iat": `+strconv.FormatInt(time.Now().Unix(), 10)+`,
+            "nonce": "mockNonce"
+        }`))
+
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(
-			w, `{
-			"access_token":"123456789",
-			"id_token":"id_123456789"
-		}`,
-		)
+		fmt.Fprintf(w, `{
+            "access_token": "123456789",
+            "id_token": "%s"
+        }`, idToken)
 	} else if r.URL.Path == "/jwks" {
 		// Key request
 		w.Header().Set("Content-Type", "application/json")
