@@ -1,8 +1,31 @@
-
-# Traefik Forward Auth ![Build Status](https://img.shields.io/github/workflow/status/thomseddon/traefik-forward-auth/CI) [![Go Report Card](https://goreportcard.com/badge/github.com/thomseddon/traefik-forward-auth)](https://goreportcard.com/report/github.com/thomseddon/traefik-forward-auth) ![Docker Pulls](https://img.shields.io/docker/pulls/thomseddon/traefik-forward-auth.svg) [![GitHub release](https://img.shields.io/github/release/thomseddon/traefik-forward-auth.svg)](https://GitHub.com/thomseddon/traefik-forward-auth/releases/)
+# Traefik Forward Auth ![Build Status](https://img.shields.io/github/workflow/status/idsulik/traefik-forward-auth/CI) [![Go Report Card](https://goreportcard.com/badge/github.com/idsulik/traefik-forward-auth)](https://goreportcard.com/report/github.com/idsulik/traefik-forward-auth) ![Docker Pulls](https://img.shields.io/docker/pulls/idsulik/traefik-forward-auth.svg) [![GitHub release](https://img.shields.io/github/release/idsulik/traefik-forward-auth.svg)](https://GitHub.com/idsulik/traefik-forward-auth/releases/)
 
 
 A minimal forward authentication service that provides OAuth/SSO login and authentication for the [traefik](https://github.com/containous/traefik) reverse proxy/load balancer.
+
+## Fork Information
+
+This is a fork of the original [thomseddon/traefik-forward-auth](https://github.com/thomseddon/traefik-forward-auth) project with improved OpenID Connect (OIDC) support and additional features. The upstream project has not been updated for almost a year, so this fork aims to maintain compatibility while adding helpful enhancements.
+
+### Key Differences in This Fork
+
+- Enhanced OpenID Connect (OIDC) provider support with improved configuration options
+- PKCE support for increased security with OIDC providers
+- Updated dependencies and Go modules to latest versions (Go 1.22)
+- Multi-architecture Docker images (amd64, arm/v7, arm64)
+- Available on Docker Hub as `idsulik/traefik-forward-auth`
+
+### Installation
+
+You can use this fork with the Docker image:
+
+```yaml
+traefik-forward-auth:
+  image: idsulik/traefik-forward-auth:latest
+  # Rest of your configuration...
+```
+
+For specific versions, see the [releases on GitHub](https://github.com/idsulik/traefik-forward-auth/releases) or the [Docker Hub page](https://hub.docker.com/r/idsulik/traefik-forward-auth/tags).
 
 ## Why?
 
@@ -18,32 +41,32 @@ A minimal forward authentication service that provides OAuth/SSO login and authe
 
 - [Releases](#releases)
 - [Usage](#usage)
-  - [Simple](#simple)
-  - [Advanced](#advanced)
-  - [Provider Setup](#provider-setup)
+    - [Simple](#simple)
+    - [Advanced](#advanced)
+    - [Provider Setup](#provider-setup)
 - [Configuration](#configuration)
-  - [Overview](#overview)
-  - [Option Details](#option-details)
+    - [Overview](#overview)
+    - [Option Details](#option-details)
 - [Concepts](#concepts)
-  - [Forwarded Headers](#forwarded-headers)
-  - [User Restriction](#user-restriction)
-  - [Applying Authentication](#applying-authentication)
-    - [Global Authentication](#global-authentication)
-    - [Selective Ingress Authentication in Kubernetes](#selective-ingress-authentication-in-kubernetes)
-    - [Selective Container Authentication in Swarm](#selective-container-authentication-in-swarm)
-    - [Rules Based Authentication](#rules-based-authentication)
-  - [Operation Modes](#operation-modes)
-    - [Overlay Mode](#overlay-mode)
-    - [Auth Host Mode](#auth-host-mode)
-  - [Logging Out](#logging-out)
+    - [Forwarded Headers](#forwarded-headers)
+    - [User Restriction](#user-restriction)
+    - [Applying Authentication](#applying-authentication)
+        - [Global Authentication](#global-authentication)
+        - [Selective Ingress Authentication in Kubernetes](#selective-ingress-authentication-in-kubernetes)
+        - [Selective Container Authentication in Swarm](#selective-container-authentication-in-swarm)
+        - [Rules Based Authentication](#rules-based-authentication)
+    - [Operation Modes](#operation-modes)
+        - [Overlay Mode](#overlay-mode)
+        - [Auth Host Mode](#auth-host-mode)
+    - [Logging Out](#logging-out)
 - [Copyright](#copyright)
 - [License](#license)
 
 ## Releases
 
-We recommend using the `2` tag on docker hub (`thomseddon/traefik-forward-auth:2`).
+We recommend using the `2` tag on docker hub (`idsulik/traefik-forward-auth:2`).
 
-You can also use the latest incremental releases found on [docker hub](https://hub.docker.com/r/thomseddon/traefik-forward-auth/tags) and [github](https://github.com/thomseddon/traefik-forward-auth/releases).
+You can also use the latest incremental releases found on [docker hub](https://hub.docker.com/r/idsulik/traefik-forward-auth/tags) and [github](https://github.com/idsulik/traefik-forward-auth/releases).
 
 ARM releases are also available on docker hub, just append `-arm` or `-arm64` to your desired released (e.g. `2-arm` or `2.1-arm64`).
 
@@ -74,7 +97,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   traefik-forward-auth:
-    image: thomseddon/traefik-forward-auth:2
+    image: idsulik/traefik-forward-auth:2
     environment:
       - PROVIDERS_GOOGLE_CLIENT_ID=your-client-id
       - PROVIDERS_GOOGLE_CLIENT_SECRET=your-client-secret
@@ -94,9 +117,9 @@ services:
 
 #### Advanced:
 
-Please see the examples directory for a more complete [docker-compose.yml](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose.yml) or [kubernetes/simple-separate-pod](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/kubernetes/simple-separate-pod/).
+Please see the examples directory for a more complete [docker-compose.yml](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose.yml) or [kubernetes/simple-separate-pod](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/kubernetes/simple-separate-pod/).
 
-Also in the examples directory is [docker-compose-auth-host.yml](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose-auth-host.yml) and [kubernetes/advanced-separate-pod](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/kubernetes/advanced-separate-pod/) which shows how to configure a central auth host, along with some other options.
+Also in the examples directory is [docker-compose-auth-host.yml](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose-auth-host.yml) and [kubernetes/advanced-separate-pod](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/kubernetes/advanced-separate-pod/) which shows how to configure a central auth host, along with some other options.
 
 #### Provider Setup
 
@@ -117,6 +140,8 @@ You must set the `providers.google.client-id` and `providers.google.client-secre
 Any provider that supports OpenID Connect 1.0 can be configured via the OIDC config options below.
 
 You must set the `providers.oidc.issuer-url`, `providers.oidc.client-id` and `providers.oidc.client-secret` config options.
+
+The OIDC provider in this fork also supports the PKCE (Proof Key for Code Exchange) flow for increased security. This can be enabled with `providers.oidc.pkce-required=true`.
 
 Please see the [Provider Setup](https://github.com/thomseddon/traefik-forward-auth/wiki/Provider-Setup) wiki page for examples.
 
@@ -177,7 +202,7 @@ OIDC Provider:
   --providers.oidc.client-id=                           Client ID [$PROVIDERS_OIDC_CLIENT_ID]
   --providers.oidc.client-secret=                       Client Secret [$PROVIDERS_OIDC_CLIENT_SECRET]
   --providers.oidc.resource=                            Optional resource indicator [$PROVIDERS_OIDC_RESOURCE]
-  --providers.oidc.pkce_required=                       Optional pkce required indicator [$PROVIDERS_OIDC_PKCE_REQUIRED]
+  --providers.oidc.pkce-required=                       Optional pkce required indicator [$PROVIDERS_OIDC_PKCE_REQUIRED]
 
 Generic OAuth2 Provider:
   --providers.generic-oauth.auth-url=                   Auth/Login URL [$PROVIDERS_GENERIC_OAUTH_AUTH_URL]
@@ -215,13 +240,13 @@ All options can be supplied in any of the following ways, in the following prece
    --auth-host="auth.example.com"
    ```
 
-   For more details, please also read the [Auth Host Mode](#auth-host-mode), operation mode in the concepts section.
+  For more details, please also read the [Auth Host Mode](#auth-host-mode), operation mode in the concepts section.
 
-   Please Note - this should be considered advanced usage, if you are having problems please try disabling this option and then re-read the [Auth Host Mode](#auth-host-mode) section.
+  Please Note - this should be considered advanced usage, if you are having problems please try disabling this option and then re-read the [Auth Host Mode](#auth-host-mode) section.
 
 - `config`
 
-   Used to specify the path to a configuration file, can be set multiple times, each file will be read in the order they are passed. Options should be set in an INI format, for example:
+  Used to specify the path to a configuration file, can be set multiple times, each file will be read in the order they are passed. Options should be set in an INI format, for example:
 
    ```
    url-path = _oauthpath
@@ -231,116 +256,116 @@ All options can be supplied in any of the following ways, in the following prece
 
   When set, if a user successfully completes authentication, then if the host of the original request requiring authentication is a subdomain of a given cookie domain, then the authentication cookie will be set for the higher level cookie domain. This means that a cookie can allow access to multiple subdomains without re-authentication. Can be specificed multiple times.
 
-   For example:
+  For example:
    ```
    --cookie-domain="example.com"  --cookie-domain="test.org"
    ```
 
-   For example, if the cookie domain `test.com` has been set, and a request comes in on `app1.test.com`, following authentication the auth cookie will be set for the whole `test.com` domain. As such, if another request is forwarded for authentication from `app2.test.com`, the original cookie will be sent and so the request will be allowed without further authentication.
+  For example, if the cookie domain `test.com` has been set, and a request comes in on `app1.test.com`, following authentication the auth cookie will be set for the whole `test.com` domain. As such, if another request is forwarded for authentication from `app2.test.com`, the original cookie will be sent and so the request will be allowed without further authentication.
 
-   Beware however, if using cookie domains whilst running multiple instances of traefik/traefik-forward-auth for the same domain, the cookies will clash. You can fix this by using a different `cookie-name` in each host/cluster or by using the same `cookie-secret` in both instances.
+  Beware however, if using cookie domains whilst running multiple instances of traefik/traefik-forward-auth for the same domain, the cookies will clash. You can fix this by using a different `cookie-name` in each host/cluster or by using the same `cookie-secret` in both instances.
 
 - `insecure-cookie`
 
-   If you are not using HTTPS between the client and traefik, you will need to pass the `insecure-cookie` option which will mean the `Secure` attribute on the cookie will not be set.
+  If you are not using HTTPS between the client and traefik, you will need to pass the `insecure-cookie` option which will mean the `Secure` attribute on the cookie will not be set.
 
 - `cookie-name`
 
-   Set the name of the cookie set following successful authentication.
+  Set the name of the cookie set following successful authentication.
 
-   Default: `_forward_auth`
+  Default: `_forward_auth`
 
 - `csrf-cookie-name`
 
-   Set the name of the temporary CSRF cookie set during authentication.
+  Set the name of the temporary CSRF cookie set during authentication.
 
-   Default: `_forward_auth_csrf`
+  Default: `_forward_auth_csrf`
 
 - `default-action`
 
-   Specifies the behavior when a request does not match any [rules](#rules). Valid options are `auth` or `allow`.
+  Specifies the behavior when a request does not match any [rules](#rules). Valid options are `auth` or `allow`.
 
-   Default: `auth` (i.e. all requests require authentication)
+  Default: `auth` (i.e. all requests require authentication)
 
 - `default-provider`
 
-   Set the default provider to use for authentication, this can be overridden within [rules](#rules). Valid options are currently `google` or `oidc`.
+  Set the default provider to use for authentication, this can be overridden within [rules](#rules). Valid options are currently `google` or `oidc`.
 
-   Default: `google`
+  Default: `google`
 
 - `domain`
 
-   When set, only users matching a given domain will be permitted to access.
+  When set, only users matching a given domain will be permitted to access.
 
-   For example, setting `--domain=example.com --domain=test.org` would mean that only users from example.com or test.org will be permitted. So thom@example.com would be allowed but thom@another.com would not.
+  For example, setting `--domain=example.com --domain=test.org` would mean that only users from example.com or test.org will be permitted. So thom@example.com would be allowed but thom@another.com would not.
 
-   For more details, please also read [User Restriction](#user-restriction) in the concepts section.
+  For more details, please also read [User Restriction](#user-restriction) in the concepts section.
 
 - `lifetime`
 
-   How long a successful authentication session should last, in seconds.
+  How long a successful authentication session should last, in seconds.
 
-   Default: `43200` (12 hours)
+  Default: `43200` (12 hours)
 
 - `logout-redirect`
 
-   When set, users will be redirected to this URL following logout.
+  When set, users will be redirected to this URL following logout.
 
 - `match-whitelist-or-domain`
 
-   When enabled, users will be permitted if they match *either* the `whitelist` or `domain` parameters.
+  When enabled, users will be permitted if they match *either* the `whitelist` or `domain` parameters.
 
-   This will be enabled by default in v3, but is disabled by default in v2 to maintain backwards compatibility.
+  This will be enabled by default in v3, but is disabled by default in v2 to maintain backwards compatibility.
 
-   Default: `false`
+  Default: `false`
 
-   For more details, please also read [User Restriction](#user-restriction) in the concepts section.
+  For more details, please also read [User Restriction](#user-restriction) in the concepts section.
 
 - `url-path`
 
-   Customise the path that this service uses to handle the callback following authentication.
+  Customise the path that this service uses to handle the callback following authentication.
 
-   Default: `/_oauth`
+  Default: `/_oauth`
 
-   Please note that when using the default [Overlay Mode](#overlay-mode) requests to this exact path will be intercepted by this service and not forwarded to your application. Use this option (or [Auth Host Mode](#auth-host-mode)) if the default `/_oauth` path will collide with an existing route in your application.
+  Please note that when using the default [Overlay Mode](#overlay-mode) requests to this exact path will be intercepted by this service and not forwarded to your application. Use this option (or [Auth Host Mode](#auth-host-mode)) if the default `/_oauth` path will collide with an existing route in your application.
 
 - `secret`
 
-   Used to sign cookies authentication, should be a random (e.g. `openssl rand -hex 16`)
+  Used to sign cookies authentication, should be a random (e.g. `openssl rand -hex 16`)
 
 - `whitelist`
 
-   When set, only specified users will be permitted.
+  When set, only specified users will be permitted.
 
-   For example, setting `--whitelist=thom@example.com --whitelist=alice@example.com` would mean that only those two exact users will be permitted. So thom@example.com would be allowed but john@example.com would not.
+  For example, setting `--whitelist=thom@example.com --whitelist=alice@example.com` would mean that only those two exact users will be permitted. So thom@example.com would be allowed but john@example.com would not.
 
-   For more details, please also read [User Restriction](#user-restriction) in the concepts section.
+  For more details, please also read [User Restriction](#user-restriction) in the concepts section.
 
 - `rule`
 
-   Specify selective authentication rules. Rules are specified in the following format: `rule.<name>.<param>=<value>`
+  Specify selective authentication rules. Rules are specified in the following format: `rule.<name>.<param>=<value>`
 
-   - `<name>` can be any string and is only used to group rules together
-   - `<param>` can be:
-       - `action` - same usage as [`default-action`](#default-action), supported values:
-           - `auth` (default)
-           - `allow`
-       - `domains` - optional, same usage as [`domain`](#domain)
-       - `provider` - same usage as [`default-provider`](#default-provider), supported values:
-           - `google`
-           - `oidc`
-       - `rule` - a rule to match a request, this uses traefik's v2 rule parser for which you can find the documentation here: https://docs.traefik.io/v2.0/routing/routers/#rule, supported values are summarised here:
-           - ``Headers(`key`, `value`)``
-           - ``HeadersRegexp(`key`, `regexp`)``
-           - ``Host(`example.com`, ...)``
-           - ``HostRegexp(`example.com`, `{subdomain:[a-z]+}.example.com`, ...)``
-           - ``Method(methods, ...)``
-           - ``Path(`path`, `/articles/{category}/{id:[0-9]+}`, ...)``
-           - ``PathPrefix(`/products/`, `/articles/{category}/{id:[0-9]+}`)``
-           - ``Query(`foo=bar`, `bar=baz`)``
-       - `whitelist` - optional, same usage as whitelist`](#whitelist)
+    - `<name>` can be any string and is only used to group rules together
+    - `<param>` can be:
+        - `action` - same usage as [`default-action`](#default-action), supported values:
+            - `auth` (default)
+            - `allow`
+        - `domains` - optional, same usage as [`domain`](#domain)
+        - `provider` - same usage as [`default-provider`](#default-provider), supported values:
+            - `google`
+            - `oidc`
+        - `rule` - a rule to match a request, this uses traefik's v2 rule parser for which you can find the documentation here: https://docs.traefik.io/v2.0/routing/routers/#rule, supported values are summarised here:
+            - ``Headers(`key`, `value`)``
+            - ``HeadersRegexp(`key`, `regexp`)``
+            - ``Host(`example.com`, ...)``
+            - ``HostRegexp(`example.com`, `{subdomain:[a-z]+}.example.com`, ...)``
+            - ``Method(methods, ...)``
+            - ``Path(`path`, `/articles/{category}/{id:[0-9]+}`, ...)``
+            - ``PathPrefix(`/products/`, `/articles/{category}/{id:[0-9]+}`)``
+            - ``Query(`foo=bar`, `bar=baz`)``
+        - `whitelist` - optional, same usage as whitelist`](#whitelist)
 
-   For example:
+  For example:
    ```
    # Allow requests that being with `/api/public` and contain the `Content-Type` header with a value of `application/json`
    rule.1.action = allow
@@ -361,7 +386,7 @@ All options can be supplied in any of the following ways, in the following prece
    rule.two.whitelist = jane@example.com
    ```
 
-   Note: It is possible to break your redirect flow with rules, please be careful not to create an `allow` rule that matches your redirect_uri unless you know what you're doing. This limitation is being tracked in in #101 and the behaviour will change in future releases.
+  Note: It is possible to break your redirect flow with rules, please be careful not to create an `allow` rule that matches your redirect_uri unless you know what you're doing. This limitation is being tracked in in #101 and the behaviour will change in future releases.
 
 ## Concepts
 
@@ -476,7 +501,7 @@ As the hostname in the `redirect_uri` is dynamically generated based on the orig
 
 #### Auth Host Mode
 
-This is an optional mode of operation that is useful when dealing with a large number of subdomains, it is activated by using the `auth-host` config option (see [this example docker-compose.yml](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose-auth-host.yml) or [this kubernetes example](https://github.com/thomseddon/traefik-forward-auth/tree/master/examples/traefik-v2/kubernetes/advanced-separate-pod)).
+This is an optional mode of operation that is useful when dealing with a large number of subdomains, it is activated by using the `auth-host` config option (see [this example docker-compose.yml](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose-auth-host.yml) or [this kubernetes example](https://github.com/idsulik/traefik-forward-auth/tree/master/examples/traefik-v2/kubernetes/advanced-separate-pod)).
 
 For example, if you have a few applications: `app1.test.com`, `app2.test.com`, `appN.test.com`, adding every domain to Google's console can become laborious.
 To utilise an auth host, permit domain level cookies by setting the cookie domain to `test.com` then set the `auth-host` to: `auth.test.com`.
@@ -497,7 +522,7 @@ Two criteria must be met for an `auth-host` to be used:
 1. Request matches given `cookie-domain`
 2. `auth-host` is also subdomain of same `cookie-domain`
 
-Please note: For Auth Host mode to work, you must ensure that requests to your auth-host are routed to the traefik-forward-auth container, as demonstrated with the service labels in the [docker-compose-auth.yml](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose-auth-host.yml) example and the [ingressroute resource](https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/traefik-v2/kubernetes/advanced-separate-pod/traefik-forward-auth/ingress.yaml) in a kubernetes example.
+Please note: For Auth Host mode to work, you must ensure that requests to your auth-host are routed to the traefik-forward-auth container, as demonstrated with the service labels in the [docker-compose-auth.yml](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/swarm/docker-compose-auth-host.yml) example and the [ingressroute resource](https://github.com/idsulik/traefik-forward-auth/blob/master/examples/traefik-v2/kubernetes/advanced-separate-pod/traefik-forward-auth/ingress.yaml) in a kubernetes example.
 
 ### Logging Out
 
@@ -513,4 +538,4 @@ Note: This only clears the auth cookie from the users browser and as this servic
 
 ## License
 
-[MIT](https://github.com/thomseddon/traefik-forward-auth/blob/master/LICENSE.md)
+[MIT](https://github.com/idsulik/traefik-forward-auth/blob/master/LICENSE.md)
