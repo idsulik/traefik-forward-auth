@@ -7,30 +7,38 @@ on:
     branches: [ master ]
 
 jobs:
-
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ^1.22
+          cache: true
 
-    - name: Set up Go 1.x
-      uses: actions/setup-go@v2
-      with:
-        go-version: ^1.13
+      - name: Check out code
+        uses: actions/checkout@v4
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
+      - name: Get dependencies
+        run: go mod download
 
-    - name: Get dependencies
-      run: |
-        go get -v -t -d ./...
-        if [ -f Gopkg.toml ]; then
-            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-            dep ensure
-        fi
+      - name: Format check
+        run: |
+          gofmt -l -d $(find . -type f -name '*.go' -not -path "./vendor/*")
+          if [ "$(gofmt -l $(find . -type f -name '*.go' -not -path "./vendor/*") | wc -l)" -gt 0 ]; then
+            echo "Code is not formatted. Please run 'make format'"
+            exit 1
+          fi
 
-    - name: Build
-      run: go build -v ./...
+      - name: Build
+        run: go build -v ./...
 
-    - name: Test
-      run: go test -v ./...
+      - name: Test
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.txt
+          fail_ci_if_error: false

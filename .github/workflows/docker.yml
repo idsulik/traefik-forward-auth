@@ -45,19 +45,15 @@ jobs:
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
             type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=sha,format=short
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
+          context: .
           push: true
           platforms: linux/amd64,linux/arm/v7,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-contexts: |
-            amd64=.
-            arm=.
-            arm64=.
-          files: |
-            linux/amd64=Dockerfile
-            linux/arm/v7=Dockerfile.arm
-            linux/arm64=Dockerfile.arm64
+          build-args: |
+            TARGETARCH=${{ matrix.platform.arch }}

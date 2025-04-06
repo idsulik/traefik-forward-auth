@@ -1,17 +1,20 @@
 FROM golang:1.22 AS builder
 
 # Setup
-RUN mkdir -p /go/src/github.com/thomseddon/traefik-forward-auth
-WORKDIR /go/src/github.com/thomseddon/traefik-forward-auth
+WORKDIR /app
 
-# Add libraries
-RUN apk add --no-cache git
+# Copy go module files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Copy & build
-ADD . /go/src/github.com/thomseddon/traefik-forward-auth/
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -installsuffix nocgo -o /traefik-forward-auth github.com/thomseddon/traefik-forward-auth/cmd
+# Copy the rest of the source code
+COPY . .
 
-# Copy into scratch container
+# Build with architecture from build arg (default to amd64)
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GO111MODULE=on go build -a -installsuffix nocgo -o /traefik-forward-auth github.com/thomseddon/traefik-forward-auth/cmd
+
+# Final stage
 FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /traefik-forward-auth ./
