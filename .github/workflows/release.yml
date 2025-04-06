@@ -1,13 +1,40 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   release:
     types: [published]
 
 jobs:
+  create_release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    # Only run this job for tag pushes, not for release events
+    if: github.event_name == 'push'
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
   build:
     name: Build release binaries
     runs-on: ubuntu-latest
+    # For tag pushes, wait for create_release job to finish
+    needs: [create_release]
+    # Skip this condition for release events
+    if: github.event_name == 'release' || github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -39,7 +66,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url }}
+          # Use the correct upload_url depending on the event type
+          upload_url: ${{ github.event_name == 'push' && needs.create_release.outputs.upload_url || github.event.release.upload_url }}
           asset_path: traefik-forward-auth_${{ matrix.suffix }}
           asset_name: traefik-forward-auth_${{ matrix.suffix }}
           asset_content_type: application/octet-stream
